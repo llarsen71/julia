@@ -70,7 +70,7 @@ abstract type Real <: Number end
 ```
 [`Number`](@ref) has no supertype, whereas [`Real`](@ref) is an abstract subtype of `Number`.
 """
-kw"abstract type"
+kw"abstract type", kw"abstract"
 
 """
     module
@@ -1848,7 +1848,7 @@ Rational{Int64}
 julia> M = [1 2; 3.5 4];
 
 julia> typeof(M)
-Matrix{Float64} = Array{Float64, 2}
+Matrix{Float64} (alias for Array{Float64, 2})
 ```
 """
 typeof
@@ -2392,6 +2392,17 @@ Construct a named tuple by selecting fields in `names` (a tuple of Symbols) from
 another named tuple.
 """
 NamedTuple{names}(nt::NamedTuple)
+
+"""
+    NamedTuple(itr)
+
+Construct a named tuple from an iterator of key-value pairs (where the keys must be
+`Symbol`s). Equivalent to `(; itr...)`.
+
+!!! compat "Julia 1.6"
+    This method requires at least Julia 1.6.
+"""
+NamedTuple(itr)
 
 """
     typeassert(x, type)

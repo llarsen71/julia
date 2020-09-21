@@ -38,6 +38,8 @@ Base.string(f::Spec{T}; modifier::String="") where {T} =
         f.precision == 0 ? ".0" : f.precision > 0 ? ".$(f.precision)" : "", modifier, char(T))
 Base.show(io::IO, f::Spec) = print(io, string(f))
 
+floatfmt(s::Spec{T}) where {T} =
+    Spec{Val{'f'}}(s.leftalign, s.plus, s.space, s.zero, s.hash, s.width, 0)
 ptrfmt(s::Spec{T}, x) where {T} =
     Spec{Val{'x'}}(s.leftalign, s.plus, s.space, s.zero, true, s.width, sizeof(x) == 8 ? 16 : 8)
 
@@ -165,15 +167,13 @@ function Format(f::AbstractString)
         end
         push!(fmts, Spec{type}(leftalign, plus, space, zero, hash, width, precision))
         start = pos
-        prevperc = false
         while pos <= len
             b = bytes[pos]
             pos += 1
             if b == UInt8('%')
                 pos > len && throw(ArgumentError("invalid format string: '$f'"))
                 if bytes[pos] == UInt8('%')
-                    pos += 1
-                    pos > len && break
+                    # escaped '%'
                     b = bytes[pos]
                     pos += 1
                 else
@@ -264,11 +264,17 @@ end
 end
 
 # integers
+toint(x) = x
+toint(x::Rational) = Integer(x)
+
+fmt(buf, pos, arg::AbstractFloat, spec::Spec{T}) where {T <: Ints} =
+    fmt(buf, pos, arg, floatfmt(spec))
+
 @inline function fmt(buf, pos, arg, spec::Spec{T}) where {T <: Ints}
     leftalign, plus, space, zero, hash, width, prec =
         spec.leftalign, spec.plus, spec.space, spec.zero, spec.hash, spec.width, spec.precision
     bs = base(T)
-    arg2 = arg isa AbstractFloat ? Integer(trunc(arg)) : arg
+    arg2 = toint(arg)
     n = i = ndigits(arg2, base=bs, pad=1)
     x, neg = arg2 < 0 ? (-arg2, true) : (arg2, false)
     arglen = n + (neg || (plus | space)) +
@@ -677,13 +683,14 @@ function plength(f::Spec{T}, x) where {T <: Strings}
 end
 
 function plength(f::Spec{T}, x) where {T <: Ints}
-    x2 = x isa AbstractFloat ? Integer(trunc(x)) : x
+    x2 = toint(x)
     return max(f.width, f.precision + ndigits(x2, base=base(T), pad=1) + 5)
 end
 
-function plength(f::Spec{T}, x) where {T <: Floats}
-    return max(f.width, f.precision + 309 + 17 + f.hash + 5)
-end
+plength(f::Spec{T}, x::AbstractFloat) where {T <: Ints} =
+    max(f.width, 0 + 309 + 17 + f.hash + 5)
+plength(f::Spec{T}, x) where {T <: Floats} =
+    max(f.width, f.precision + 309 + 17 + f.hash + 5)
 
 @inline function computelen(substringranges, formats, args)
     len = sum(length, substringranges)

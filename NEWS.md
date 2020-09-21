@@ -13,6 +13,9 @@ New language features
 * The library name passed to `ccall` or `@ccall` can now be an expression involving
   global variables and function calls. The expression will be evaluated the first
   time the `ccall` executes ([#36458]).
+* `ꜛ` (U+A71B), `ꜜ` (U+A71C) and `ꜝ` (U+A71D) can now also be used as operator
+  suffixes. They can be tab-completed from `\^uparrow`, `\^downarrow` and `\^!` in the REPL
+  ([#37542]).
 * The syntax `import A as B` (plus `import A: x as y`, etc.) can now be used to
   rename imported modules and identifiers ([#1255]).
 
@@ -60,8 +63,9 @@ Build system changes
 
 Library functions
 -----------------
-* The `Base.Grisu` code has been officially removed (float printing was switched to the ryu algorithm code in 1.4)
 
+* The `Base.download` function has been deprecated (silently, by default) in favor of the new `Downloads.download` standard library function ([#37340]).
+* The `Base.Grisu` code has been officially removed (float printing was switched to the ryu algorithm code in 1.4)
 
 New library functions
 ---------------------
@@ -73,14 +77,17 @@ New library functions
   for writing `(f(args...) for args in zip(iterators...))`, i.e. a lazy `map` ([#34352]).
 * New function `sincospi` for simultaneously computing `sinpi(x)` and `cospi(x)` more
   efficiently ([#35816]).
+* New function `addenv` for adding environment mappings into a `Cmd` object, returning the new `Cmd` object.
 
 New library features
 --------------------
 
 * The `redirect_*` functions can now be called on `IOContext` objects.
+* New constructor `NamedTuple(iterator)` that constructs a named tuple from a key-value pair iterator.
 
 Standard library changes
 ------------------------
+
 * The `nextprod` function now accepts tuples and other array types for its first argument ([#35791]).
 * The `reverse(A; dims)` function for multidimensional `A` can now reverse multiple dimensions at once
   by passing a tuple for `dims`, and defaults to reversing all dimensions; there is also a multidimensional
@@ -99,8 +106,16 @@ Standard library changes
 * `RegexMatch` objects can now be probed for whether a named capture group exists within it through `haskey()` ([#36717]).
 * For consistency `haskey(r::RegexMatch, i::Integer)` has also been added and returns if the capture group for `i` exists ([#37300]).
 * A new standard library `TOML` has been added for parsing and printing [TOML files](https://toml.io) ([#37034]).
+* A new standard library `Downloads` has been added, which replaces the old `Base.download` function with `Downloads.download`, providing cross-platform, multi-protocol, in-process download functionality implemented with [libcurl](https://curl.haxx.se/libcurl/) ([#37340]).
+* The `Pkg.BinaryPlatforms` module has been moved into `Base` as `Base.BinaryPlatforms` and heavily reworked.
+  Applications that want to be compatible with the old API should continue to import `Pkg.BinaryPlatforms`,
+  however new users should use `Base.BinaryPlatforms` directly. ([#37320])
+* The `Pkg.Artifacts` module has been imported as a separate standard library.  It is still available as
+  `Pkg.Artifacts`, however starting from Julia v1.6+, packages may import simply `Artifacts` without importing
+  all of `Pkg` alongside. ([#37320])
 
 #### LinearAlgebra
+
 * New method `LinearAlgebra.issuccess(::CholeskyPivoted)` for checking whether pivoted Cholesky factorization was successful ([#36002]).
 * `UniformScaling` can now be indexed into using ranges to return dense matrices and vectors ([#24359]).
 * New function `LinearAlgebra.BLAS.get_num_threads()` for getting the number of BLAS threads. ([#36360])
@@ -151,6 +166,8 @@ Standard library changes
 
 #### Dates
 * `Quarter` period is defined ([#35519]).
+* Zero-valued `FixedPeriod`s and `OtherPeriod`s now compare equal, e.g.,
+  `Year(0) == Day(0)`. The behavior of non-zero `Period`s is not changed. ([#37486])
 
 #### Statistics
 

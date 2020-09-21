@@ -2296,6 +2296,11 @@ end
 @test @m37134()(1) == 62
 @test_throws MethodError @m37134()(1.0) == 62
 
+macro n37134()
+    :($(esc(Expr(:tuple, Expr(:..., :x))))->$(esc(:x)))
+end
+@test @n37134()(2,1) === (2,1)
+
 @testset "unary ± and ∓" begin
     @test Meta.parse("±x") == Expr(:call, :±, :x)
     @test Meta.parse("∓x") == Expr(:call, :∓, :x)
@@ -2335,6 +2340,8 @@ if isodd(1) && all(iseven(2) for c in ())
 else
     @test false
 end
+
+@test :(a +ꜝ b) == Expr(:call, :+ꜝ, :a, :b)
 
 # import ... as
 @test_throws ParseError("invalid syntax \"using A as ...\"") Meta.parse("using A as B")

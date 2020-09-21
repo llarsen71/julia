@@ -381,10 +381,16 @@ function nfields_tfunc(@nospecialize(x))
             return Const(isdefined(x, :types) ? length(x.types) : length(x.name.names))
         end
     end
+    if isa(x, Union)
+        na = nfields_tfunc(x.a)
+        na === Int && return Int
+        return tmerge(na, nfields_tfunc(x.b))
+    end
     return Int
 end
 add_tfunc(nfields, 1, 1, nfields_tfunc, 1)
 add_tfunc(Core._expr, 1, INT_INF, (@nospecialize args...)->Expr, 100)
+add_tfunc(svec, 0, INT_INF, (@nospecialize args...)->SimpleVector, 20)
 function typevar_tfunc(@nospecialize(n), @nospecialize(lb_arg), @nospecialize(ub_arg))
     lb = Union{}
     ub = Any
@@ -513,40 +519,40 @@ function typeof_tfunc(@nospecialize(t))
 end
 add_tfunc(typeof, 1, 1, typeof_tfunc, 0)
 
+function typeassert_type_instance(@nospecialize(v), @nospecialize(t))
+    if isa(v, Const)
+        if !has_free_typevars(t) && !isa(v.val, t)
+            return Bottom
+        end
+        return v
+    elseif isa(v, PartialStruct)
+        has_free_typevars(t) && return v
+        widev = widenconst(v)
+        if widev <: t
+            return v
+        elseif typeintersect(widev, t) === Bottom
+            return Bottom
+        end
+        @assert widev <: Tuple
+        new_fields = Vector{Any}(undef, length(v.fields))
+        for i = 1:length(new_fields)
+            new_fields[i] = typeassert_type_instance(v.fields[i], getfield_tfunc(t, Const(i)))
+            if new_fields[i] === Bottom
+                return Bottom
+            end
+        end
+        return tuple_tfunc(new_fields)
+    elseif isa(v, Conditional)
+        if !(Bool <: t)
+            return Bottom
+        end
+        return v
+    end
+    return typeintersect(widenconst(v), t)
+end
 function typeassert_tfunc(@nospecialize(v), @nospecialize(t))
     t = instanceof_tfunc(t)[1]
     t === Any && return v
-    function typeassert_type_instance(@nospecialize(v), @nospecialize(t))
-        if isa(v, Const)
-            if !has_free_typevars(t) && !isa(v.val, t)
-                return Bottom
-            end
-            return v
-        elseif isa(v, PartialStruct)
-            has_free_typevars(t) && return v
-            widev = widenconst(v)
-            if widev <: t
-                return v
-            elseif typeintersect(widev, t) === Bottom
-                return Bottom
-            end
-            @assert widev <: Tuple
-            new_fields = Vector{Any}(undef, length(v.fields))
-            for i = 1:length(new_fields)
-                new_fields[i] = typeassert_type_instance(v.fields[i], getfield_tfunc(t, Const(i)))
-                if new_fields[i] === Bottom
-                    return Bottom
-                end
-            end
-            return tuple_tfunc(new_fields)
-        elseif isa(v, Conditional)
-            if !(Bool <: t)
-                return Bottom
-            end
-            return v
-        end
-        return typeintersect(widenconst(v), t)
-    end
     return typeassert_type_instance(v, t)
 end
 add_tfunc(typeassert, 2, 2, typeassert_tfunc, 4)
@@ -1088,6 +1094,9 @@ function apply_type_tfunc(@nospecialize(headtypetype), @nospecialize args...)
     else
         return Type
     end
+    if !isempty(args) && isvarargtype(args[end])
+        return Type
+    end
     largs = length(args)
     if headtype === Union
         largs == 0 && return Const(Bottom)
@@ -1292,6 +1301,26 @@ function tuple_tfunc(atypes::Vector{Any})
     return anyinfo ? PartialStruct(typ, atypes) : typ
 end
 
+function arrayref_tfunc(@nospecialize(boundscheck), @nospecialize(a), @nospecialize i...)
+    a = widenconst(a)
+    if a <: Array
+        if isa(a, DataType) && (isa(a.parameters[1], Type) || isa(a.parameters[1], TypeVar))
+            # TODO: the TypeVar case should not be needed here
+            a = a.parameters[1]
+            return isa(a, TypeVar) ? a.ub : a
+        elseif isa(a, UnionAll) && !has_free_typevars(a)
+            unw = unwrap_unionall(a)
+            if isa(unw, DataType)
+                return rewrap_unionall(unw.parameters[1], a)
+            end
+        end
+    end
+    return Any
+end
+add_tfunc(arrayref, 3, INT_INF, arrayref_tfunc, 20)
+add_tfunc(const_arrayref, 3, INT_INF, arrayref_tfunc, 20)
+add_tfunc(arrayset, 4, INT_INF, (@nospecialize(boundscheck), @nospecialize(a), @nospecialize(v), @nospecialize i...)->a, 20)
+
 function array_type_undefable(@nospecialize(a))
     if isa(a, Union)
         return array_type_undefable(a.a) || array_type_undefable(a.b)
@@ -1382,41 +1411,8 @@ end
 
 function builtin_tfunction(interp::AbstractInterpreter, @nospecialize(f), argtypes::Array{Any,1},
                            sv::Union{InferenceState,Nothing})
-    isva = !isempty(argtypes) && isvarargtype(argtypes[end])
     if f === tuple
         return tuple_tfunc(argtypes)
-    elseif f === svec
-        return SimpleVector
-    elseif f === arrayset
-        if length(argtypes) < 4
-            isva && return Any
-            return Bottom
-        end
-        return argtypes[2]
-    elseif f === arrayref || f === const_arrayref
-        if length(argtypes) < 3
-            isva && return Any
-            return Bottom
-        end
-        a = widenconst(argtypes[2])
-        if a <: Array
-            if isa(a, DataType) && (isa(a.parameters[1], Type) || isa(a.parameters[1], TypeVar))
-                # TODO: the TypeVar case should not be needed here
-                a = a.parameters[1]
-                return isa(a, TypeVar) ? a.ub : a
-            elseif isa(a, UnionAll) && !has_free_typevars(a)
-                unw = unwrap_unionall(a)
-                if isa(unw, DataType)
-                    return rewrap_unionall(unw.parameters[1], a)
-                end
-            end
-        end
-        return Any
-    elseif f === Core._expr
-        if length(argtypes) < 1 && !isva
-            return Bottom
-        end
-        return Expr
     elseif f === invoke
         if length(argtypes) > 1 && sv !== nothing && (isa(argtypes[1], Const) || isa(argtypes[1], Type))
             if isa(argtypes[1], Const)
@@ -1436,9 +1432,6 @@ function builtin_tfunction(interp::AbstractInterpreter, @nospecialize(f), argtyp
                 return invoke_tfunc(interp, ft, sigty, argtypes_to_type(argtypes[3:end]), sv)
             end
         end
-        return Any
-    end
-    if isva
         return Any
     end
     if isa(f, IntrinsicFunction)
@@ -1464,7 +1457,24 @@ function builtin_tfunction(interp::AbstractInterpreter, @nospecialize(f), argtyp
         tf = T_FFUNC_VAL[fidx]
     end
     tf = tf::Tuple{Int, Int, Any}
-    if !(tf[1] <= length(argtypes) <= tf[2])
+    if !isempty(argtypes) && isvarargtype(argtypes[end])
+        if length(argtypes) - 1 > tf[2]
+            # definitely too many arguments
+            return Bottom
+        end
+        if length(argtypes) - 1 == tf[2]
+            argtypes = argtypes[1:end-1]
+        else
+            vatype = argtypes[end]
+            argtypes = argtypes[1:end-1]
+            while length(argtypes) < tf[1]
+                push!(argtypes, unwrapva(vatype))
+            end
+            if length(argtypes) < tf[2]
+                push!(argtypes, unconstrain_vararg_length(vatype))
+            end
+        end
+    elseif !(tf[1] <= length(argtypes) <= tf[2])
         # wrong # of args
         return Bottom
     end
