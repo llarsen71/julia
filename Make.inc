@@ -1486,23 +1486,35 @@ LIBGCC_NAME := libgcc_s_sjlj-1.$(SHLIB_EXT)
 else
 LIBGCC_NAME := libgcc_s_seh-1.$(SHLIB_EXT)
 endif
+LIBOPENLIBM_NAME := libopenlibm.$(SHLIB_EXT)
 endif
 ifeq ($(OS),Darwin)
 LIBGCC_NAME := libgcc_s.1.$(SHLIB_EXT)
+LIBOPENLIBM_NAME := libopenlibm.3.$(SHLIB_EXT)
 endif
 ifneq ($(findstring $(OS),Linux FreeBSD),)
 LIBGCC_NAME := libgcc_s.$(SHLIB_EXT).1
+LIBOPENLIBM_NAME := libopenlibm.$(SHLIB_EXT).3
 endif
 
 LIBGCC_BUILD_DEPLIB := $(call dep_lib_path,$(build_bindir),$(build_shlibdir)/$(LIBGCC_NAME))
 LIBGCC_INSTALL_DEPLIB := $(call dep_lib_path,$(bindir),$(private_shlibdir)/$(LIBGCC_NAME))
+LIBOPENLIBM_BUILD_DEPLIB := $(call dep_lib_path,$(build_bindir),$(build_shlibdir)/$(LIBOPENLIBM_NAME))
+LIBOPENLIBM_INSTALL_DEPLIB := $(call dep_lib_path,$(bindir),$(private_shlibdir)/$(LIBOPENLIBM_NAME))
 
-# We only list libjulia and libgcc_s for now.  libgcc_s because FreeBSD needs to load ours,
-# not the system one.  Note that libjulia must always come last.
-LOADER_BUILD_DEP_LIBS = $(LIBGCC_BUILD_DEPLIB):$(LIBJULIA_BUILD_DEPLIB)
-LOADER_DEBUG_BUILD_DEP_LIBS = $(LIBGCC_BUILD_DEPLIB):$(LIBJULIA_DEBUG_BUILD_DEPLIB)
-LOADER_INSTALL_DEP_LIBS = $(LIBGCC_INSTALL_DEPLIB):$(LIBJULIA_INSTALL_DEPLIB)
-LOADER_DEBUG_INSTALL_DEP_LIBS = $(LIBGCC_INSTALL_DEPLIB):$(LIBJULIA_DEBUG_INSTALL_DEPLIB)
+# We list:
+#  * libgcc_s, because FreeBSD needs to load ours, not the system one.
+#  * libopenlibm, because Windows has an untrustworthy libm, and we want to use ours more than theirs
+#  * libjulia, which must always come last.
+#
+# We need these four separate variables because:
+#  * debug builds must link against libjuliadebug, not libjulia
+#  * install time relative paths are not equal to build time relative paths (../lib vs. ../lib/julia)
+# That second point will no longer be true for most deps once they are placed within Artifacts directories.
+LOADER_BUILD_DEP_LIBS = $(LIBGCC_BUILD_DEPLIB):$(LIBOPENLIBM_BUILD_DEPLIB):$(LIBJULIA_BUILD_DEPLIB)
+LOADER_DEBUG_BUILD_DEP_LIBS = $(LIBGCC_BUILD_DEPLIB):$(LIBOPENLIBM_BUILD_DEPLIB):$(LIBJULIA_DEBUG_BUILD_DEPLIB)
+LOADER_INSTALL_DEP_LIBS = $(LIBGCC_INSTALL_DEPLIB):$(LIBOPENLIBM_INSTALL_DEPLIB):$(LIBJULIA_INSTALL_DEPLIB)
+LOADER_DEBUG_INSTALL_DEP_LIBS = $(LIBGCC_INSTALL_DEPLIB):$(LIBOPENLIBM_INSTALL_DEPLIB):$(LIBJULIA_DEBUG_INSTALL_DEPLIB)
 
 # Colors for make
 ifndef VERBOSE
