@@ -241,7 +241,7 @@ For users coming to Julia from R, these are some noteworthy differences:
   * There are no classes in Julia. Instead they are structures (mutable or immutable), containing data but no methods.
   * Calling a method of a class in Python (`a = MyClass(x), x.func(y)`) corresponds to a function call in Julia, e.g. `a = MyStruct(x), func(x::MyStruct, y)`. In general, multiple dispatch is more flexible and powerful than the Python class system.
   * Julia structures may have exactly one abstract supertype, whereas Python classes can inherit from one or more (abstract or concrete) superclasses.
-  * The logical Julia program structure (Packages and Modules) is independent of the file strucutre (`include` for additional files), whereas the Python code structure is defined by directories (Packages) and files (Modules).
+  * The logical Julia program structure (Packages and Modules) is independent of the file structure (`include` for additional files), whereas the Python code structure is defined by directories (Packages) and files (Modules).
   * The ternary operator `x > 0 ? 1 : -1` in Julia corresponds to conditional expression in Python `1 if x > 0 else -1`.
   * In Julia the `@` symbol refers to a macro, whereas in Python it refers to a decorator.
   * Exception handling in Julia is done using `try` — `catch` — `finally`, instead of `try` — `except` — `finally`. In contrast to Python, it is not recommended to use exception handling as part of the normal workflow in Julia due to performance reasons.
